@@ -1,6 +1,4 @@
-# ============================================================
-# Chapter 5 methods built on algorithm3.1_runtime_fixed.R
-# ============================================================
+# Chapter 5 experiment wrappers.
 algorithm_file <- if (file.exists("algorithm3.1_runtime_fixed.R")) {
   "algorithm3.1_runtime_fixed.R"
 } else {
@@ -8,9 +6,7 @@ algorithm_file <- if (file.exists("algorithm3.1_runtime_fixed.R")) {
 }
 source(algorithm_file)
 
-# ------------------------------------------------------------
-# Helper: final row with a separate allocated-budget diagnostic
-# ------------------------------------------------------------
+# Add the budget actually allocated to this row.
 ch5_final_row <- function(out, method_name, seed, theta_set_id, theta_set_size,
                           B_tune_sec, allocated_budget_sec = B_tune_sec,
                           alpha_in = 0.05, N0_final = 500, N1_final = 500) {
@@ -28,9 +24,7 @@ ch5_final_row <- function(out, method_name, seed, theta_set_id, theta_set_size,
   row
 }
 
-# ------------------------------------------------------------
-# Ablation study for one regime / seed
-# ------------------------------------------------------------
+# Ablation runs for one regime and seed.
 run_one_ch5_ablation <- function(seed = 1,
                                  thetas_in,
                                  theta_set_id = NA_character_,
@@ -78,9 +72,8 @@ run_one_ch5_ablation <- function(seed = 1,
     alpha = alpha_in, rH1 = rH1_shift005, seed = seed + 10000L,
     method_label = "SA_random_half")
 
-  # SH initialisation is paid for, but this row reports the local-refinement
-  # result alone.  This distinguishes it from Hybrid, which returns the best
-  # incumbent over both stages.
+  # Report the SA-only result after the SH start has been chosen.
+  # The full Hybrid row keeps the best incumbent from both stages.
   init_obj <- choose_hybrid_init_from_sh(out_sh_half, thetas_in)
   B_sa_after_init <- max(0, B_tune_in - out_sh_half$tune_elapsed)
   out_sa_from_sh_only <- tune_sa_valid_graph(
@@ -160,9 +153,7 @@ run_ch5_ablation_grid <- function(all_thetas = full_thetas,
   out_df
 }
 
-# ------------------------------------------------------------
-# Lambda sensitivity
-# ------------------------------------------------------------
+# Sensitivity to the SH/SA budget split.
 run_ch5_lambda_sensitivity <- function(all_thetas = full_thetas,
                                        candidate_sizes = c(128, 512),
                                        budget_grid = c(80, 160, 320),
@@ -205,9 +196,7 @@ run_ch5_lambda_sensitivity <- function(all_thetas = full_thetas,
   out_df
 }
 
-# ------------------------------------------------------------
-# Wrapper to run all Chapter 5 experiments
-# ------------------------------------------------------------
+# Main Chapter 5 run.
 run_ch5_all_runtime_fixed <- function() {
   main <- run_experiment_grid_with_hybrid(
     all_thetas = full_thetas,

@@ -1,15 +1,5 @@
-# =========================================
-# Sequential KS tuning under runtime budgets
-# Runtime-fixed version for Chapters 3--5
-#
-# Key fixes relative to the earlier algorithm3.1.R:
-#   1. seq_ks_once() is lazy stage-by-stage, not full n[K] upfront.
-#   2. tuning-time evaluations receive an explicit deadline and sample guard.
-#   3. min_runs is a target, not permission to exceed the runtime budget.
-#   4. SA moves on the fixed candidate set via a kNN graph, preserving fair search spaces.
-#   5. SH uses complete-round logic and budget-aware per-candidate evaluation.
-#   6. final reporting includes budget diagnostics and deterministic final seeds.
-# =========================================
+# Sequential KS tuning code used for the thesis experiments.
+# Runtime is treated as the tuning resource throughout.
 
 set.seed(1)
 alpha <- 0.05
@@ -18,18 +8,13 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
-# -----------------------------------------
-# Alternative used under H1
-# -----------------------------------------
-# Function name retained for compatibility with earlier drafts; the current
-# benchmark alternative is N(0.03, 1), matching the thesis text.
+# Benchmark alternative used in the reported experiments.
+# The function name is old, but the mean shift below is the one in the thesis.
 rH1_shift005 <- function(n) rnorm(n, mean = 0.03, sd = 1)
-# Alias retained for compatibility with older Chapter 5 files.
+# Older scripts may still call this name.
 rH1_shift003 <- rH1_shift005
 
-# -----------------------------------------
-# Basic utilities
-# -----------------------------------------
+# Small utilities
 now_elapsed <- function() proc.time()[["elapsed"]]
 
 remaining_budget <- function(t0, B) {
@@ -76,15 +61,13 @@ stable_seed <- function(...) {
   as.integer(max(1L, v))
 }
 
-# -----------------------------------------
 # Fast asymptotic one-sample KS p-value
-# -----------------------------------------
 kolmogorov_sf <- function(z, tol = 1e-12, max_terms = 100L) {
   if (!is.finite(z)) return(NA_real_)
   if (z <= 0) return(1)
   j <- seq_len(max_terms)
   terms <- 2 * (-1)^(j - 1) * exp(-2 * (j^2) * (z^2))
-  # Truncate when terms are negligible.
+  # Stop once the remaining terms are too small to matter here.
   small <- which(abs(terms) < tol)
   if (length(small) > 0) terms <- terms[seq_len(small[1])]
   p <- sum(terms)
@@ -104,9 +87,7 @@ fast_ks_pvalue <- function(x) {
   kolmogorov_sf(z)
 }
 
-# Conservative sample guard used only during tuning.  The goal is not to
-# approximate runtime perfectly, but to prevent a candidate from entering a
-# million-sample stage when the per-candidate budget is a fraction of a second.
+# Tuning guard: keep very large stages from swallowing a tiny budget.
 max_n_for_tuning_budget <- function(seconds,
                                     min_n = 2000L,
                                     base_n = 15000L,
@@ -116,9 +97,7 @@ max_n_for_tuning_budget <- function(seconds,
   as.integer(max(min_n, min(hard_max, base_n + per_sec * seconds)))
 }
 
-# -----------------------------------------
-# One run of sequential KS
-# -----------------------------------------
+# One run of the sequential KS wrapper
 seq_ks_once <- function(theta,
                         alpha = 0.05,
                         scenario = c("H0", "H1"),
@@ -190,9 +169,7 @@ seq_ks_once <- function(theta,
        abort_reason = NA_character_)
 }
 
-# -----------------------------------------
-# Budgeted Monte Carlo evaluation of one scenario
-# -----------------------------------------
+# Time-capped Monte Carlo evaluation for one scenario
 eval_theta_timebudget <- function(theta,
                                   time_budget_sec,
                                   alpha = 0.05,
@@ -249,9 +226,7 @@ eval_theta_timebudget <- function(theta,
   )
 }
 
-# -----------------------------------------
-# Candidate set Theta (full grid)
-# -----------------------------------------
+# Full candidate grid
 make_candidates <- function() {
   grid <- expand.grid(
     n0    = c(40, 60, 80, 100, 120, 160, 200, 260, 320),
@@ -282,9 +257,7 @@ full_thetas <- cand$thetas
 full_theta_levels <- cand$levels
 cat("Full candidate count |Theta| =", length(full_thetas), "\n")
 
-# -----------------------------------------
-# Helpers for subsets / indexing / graph neighbours
-# -----------------------------------------
+# Candidate subsets, indexing, and graph neighbours
 make_levels_from_thetas <- function(thetas) {
   df <- do.call(rbind, lapply(thetas, function(th) {
     data.frame(n0 = th$n0, gamma = th$gamma, K = th$K,
@@ -407,9 +380,7 @@ choose_hybrid_init_from_sh <- function(out_sh, thetas) {
   list(init_idx = init_idx, init_theta = thetas[[init_idx]])
 }
 
-# -----------------------------------------
-# Final evaluation
-# -----------------------------------------
+# Independent final evaluation after selection
 final_eval_fixedN <- function(theta, N, alpha = 0.05,
                               scenario = c("H0", "H1"),
                               rH1 = rH1_shift005,
@@ -441,9 +412,7 @@ final_eval_fixedN <- function(theta, N, alpha = 0.05,
        raw = list(rej = rej, cpu = cpu, stage = stage, aborted = aborted))
 }
 
-# -----------------------------------------
-# Common validity-aware oracle
-# -----------------------------------------
+# Common candidate evaluation used during tuning
 evaluate_theta_valid <- function(theta, r,
                                  alpha = 0.05,
                                  rH1 = rH1_shift005,
@@ -508,9 +477,7 @@ evaluate_theta_valid <- function(theta, r,
        h1_timed_out = isTRUE(ev1$timed_out))
 }
 
-# -----------------------------------------
 # Uniform allocation
-# -----------------------------------------
 tune_uniform_timebudgeted <- function(thetas,
                                       B_tune_sec,
                                       r_eval = 0.25,
@@ -563,9 +530,7 @@ tune_uniform_timebudgeted <- function(thetas,
        n_timed_out = n_timed_out, r_eval = r_eval, cycles_completed = cycle_id)
 }
 
-# -----------------------------------------
 # Random search
-# -----------------------------------------
 tune_random_search_valid <- function(thetas,
                                      B_tune_sec,
                                      r_eval = 0.25,
@@ -609,9 +574,7 @@ tune_random_search_valid <- function(thetas,
        n_timed_out = n_timed_out, r_eval = r_eval)
 }
 
-# -----------------------------------------
-# Simulated annealing on fixed candidate-set graph
-# -----------------------------------------
+# Simulated annealing on the fixed candidate-set graph
 tune_sa_valid_graph <- function(thetas,
                                 B_tune_sec,
                                 init_idx = NULL,
@@ -724,9 +687,7 @@ tune_sa_valid_from_init <- function(thetas,
                       seed = seed, method_label = "SA_from_init")
 }
 
-# -----------------------------------------
 # Successive Halving
-# -----------------------------------------
 successive_halving_timebudgeted <- function(thetas,
                                             B_tune_sec,
                                             eta = 2,
@@ -787,8 +748,7 @@ successive_halving_timebudgeted <- function(thetas,
       rem <- min(rem_outer, rem_round)
       if (rem <= 0.05) break
 
-      # Increase fidelity slightly when the round has spare budget, while
-      # keeping the originally intended ladder as a lower bound.
+      # Use spare round time, but do not go below the planned ladder value.
       candidates_left <- length(S_round) - pos + 1L
       rk_dynamic <- min(rem, max(rk, rem_round / max(1L, candidates_left)))
 
@@ -858,9 +818,7 @@ successive_halving_timebudgeted <- function(thetas,
        fidelity_ladder = fidelity_ladder, lcb_conf = lcb_conf)
 }
 
-# -----------------------------------------
-# Hybrid: SH first, then SA refinement
-# -----------------------------------------
+# Hybrid: SH screen, then SA refinement
 tune_hybrid_sh_sa <- function(thetas,
                               levels = NULL,
                               B_tune_sec,
@@ -942,9 +900,7 @@ tune_hybrid_sh_sa <- function(thetas,
        restrict_to_sh_survivors = restrict_to_sh_survivors)
 }
 
-# -----------------------------------------
-# Final reporting row
-# -----------------------------------------
+# Row returned for the result CSV
 final_row_from_tuner <- function(out, method_name, seed, theta_set_id, theta_set_size,
                                  B_tune_sec, alpha_in = 0.05,
                                  N0_final = 500, N1_final = 500) {
@@ -995,9 +951,7 @@ final_row_from_tuner <- function(out, method_name, seed, theta_set_id, theta_set
     stringsAsFactors = FALSE)
 }
 
-# -----------------------------------------
-# Main method comparison for one regime / one seed
-# -----------------------------------------
+# Main method comparison for one regime and seed
 run_one_comparison_with_hybrid <- function(seed = 1,
                                            thetas_in,
                                            levels_in = make_levels_from_thetas(thetas_in),
@@ -1095,9 +1049,7 @@ run_experiment_grid_with_hybrid <- function(
   out_df
 }
 
-# -----------------------------------------
-# Sensitivity helpers retained for earlier chapters / appendices
-# -----------------------------------------
+# Extra sensitivity helpers kept for reference
 run_sh_sensitivity <- function(
     all_thetas = full_thetas,
     candidate_sizes = c(64, 512),
@@ -1170,9 +1122,7 @@ run_sa_sensitivity <- function(
   out_df
 }
 
-# -----------------------------------------
-# Hybrid internal tuning retained for compatibility
-# -----------------------------------------
+# Hybrid internal tuning kept for reference
 make_hybrid_param_grid <- function(
     lambda_sh_grid   = c(0.30, 0.50, 0.70),
     sh_eta_grid      = c(2, 3),
@@ -1332,9 +1282,7 @@ validate_top_hybrid_settings_only <- function(
   out_df
 }
 
-# -----------------------------------------
 # Budget diagnostics
-# -----------------------------------------
 budget_diagnostics <- function(df, tolerance_sec = 5) {
   if (!"budget_overrun_sec" %in% names(df)) {
     df$budget_overrun_sec <- pmax(df$tune_elapsed_sec - df$B_tune_sec, 0)

@@ -1,10 +1,9 @@
-# Plots used in Chapter 5.
-
+# Chapter 5 plots for the budget-safe rerun.
 library(dplyr)
 library(ggplot2)
 library(forcats)
 
-if (!dir.exists("figures_runtime_fixed")) dir.create("figures_runtime_fixed")
+if (!dir.exists("figures_budgetsafe")) dir.create("figures_budgetsafe")
 
 theme_main <- theme_bw(base_size = 13) +
   theme(
@@ -16,7 +15,7 @@ theme_main <- theme_bw(base_size = 13) +
 
 safe_se <- function(x) {
   x <- x[!is.na(x)]
-  if (length(x) <= 1L) return(0)
+  if (length(x) <= 1) return(0)
   sd(x) / sqrt(length(x))
 }
 
@@ -25,10 +24,10 @@ shape_values_7 <- c("SH_full" = 16, "SA_full" = 17, "Hybrid" = 15,
                     "SH_half" = 3, "SA_random_half" = 7,
                     "SA_from_SH_half" = 8, "Hybrid_restricted" = 4)
 
-# Main comparison with the hybrid.
-main_file <- "results_main_with_hybrid_runtime_fixed.csv"
+main_file <- "results_main_with_hybrid_budgetsafe.csv"
 main_df <- read.csv(main_file, stringsAsFactors = FALSE)
 main_methods <- c("Uniform", "Random", "SA", "SH", "Hybrid")
+
 main_df <- main_df %>%
   filter(method %in% main_methods) %>%
   mutate(method = factor(method, levels = main_methods),
@@ -45,6 +44,7 @@ main_sum <- main_df %>%
             mean_valid_rate = mean(valid_flag, na.rm = TRUE),
             mean_c0 = mean(final_c0_mean, na.rm = TRUE),
             mean_n_eval = mean(n_theta_eval, na.rm = TRUE),
+            mean_overrun = mean(budget_overrun_sec, na.rm = TRUE),
             .groups = "drop") %>%
   filter(n_valid_power > 0, is.finite(mean_valid_power))
 
@@ -66,7 +66,7 @@ p_main <- ggplot(main_sum,
        y = "Mean valid power") +
   theme_main
 
-ggsave("figures_runtime_fixed/ch5_main_mean_valid_power_with_hybrid.png", p_main,
+ggsave("figures_budgetsafe/ch5_main_mean_valid_power_with_hybrid.png", p_main,
        width = 10, height = 7, dpi = 300)
 
 rank_df <- main_sum %>%
@@ -86,13 +86,11 @@ p_rank <- ggplot(rank_df, aes(x = B_tune_sec, y = method, fill = rank_valid_powe
   labs(x = expression(B[tune] ~ "(seconds)"), y = NULL) +
   theme_main
 
-ggsave("figures_runtime_fixed/ch5_main_rank_heatmap_with_hybrid.png", p_rank,
+ggsave("figures_budgetsafe/ch5_main_rank_heatmap_with_hybrid.png", p_rank,
        width = 10, height = 7, dpi = 300)
 
-# Ablation plot.
-abl_file <- "results_ch5_hybrid_ablation_runtime_fixed.csv"
-if (file.exists(abl_file)) {
-  abl <- read.csv(abl_file, stringsAsFactors = FALSE)
+if (file.exists("results_ch5_hybrid_ablation_budgetsafe.csv")) {
+  abl <- read.csv("results_ch5_hybrid_ablation_budgetsafe.csv", stringsAsFactors = FALSE)
   abl_methods <- c("SH_full", "SA_full", "Hybrid", "SH_half",
                    "SA_random_half", "SA_from_SH_half", "Hybrid_restricted")
   abl <- abl %>%
@@ -100,7 +98,6 @@ if (file.exists(abl_file)) {
     mutate(method = factor(method, levels = abl_methods),
            theta_set_size = factor(theta_set_size),
            B_tune_sec = factor(B_tune_sec))
-
   abl_sum <- abl %>%
     group_by(theta_set_size, B_tune_sec, method) %>%
     summarise(n_valid_power = sum(!is.na(valid_power)),
@@ -109,6 +106,7 @@ if (file.exists(abl_file)) {
               mean_valid_rate = mean(valid_flag, na.rm = TRUE),
               mean_power = mean(final_power_hat, na.rm = TRUE),
               mean_c0 = mean(final_c0_mean, na.rm = TRUE),
+              mean_overrun = mean(budget_overrun_sec, na.rm = TRUE),
               .groups = "drop") %>%
     filter(n_valid_power > 0, is.finite(mean_valid_power))
 
@@ -119,18 +117,15 @@ if (file.exists(abl_file)) {
     geom_point(size = 2.4, na.rm = TRUE) +
     facet_wrap(~ theta_set_size, nrow = 1) +
     scale_shape_manual(values = shape_values_7, drop = FALSE) +
-    labs(x = expression(B[tune] ~ "(seconds)"),
-         y = "Mean valid power") +
+    labs(x = expression(B[tune] ~ "(seconds)"), y = "Mean valid power") +
     theme_main
 
-  ggsave("figures_runtime_fixed/ch5_hybrid_ablation_valid_power.png", p_abl,
+  ggsave("figures_budgetsafe/ch5_hybrid_ablation_valid_power.png", p_abl,
          width = 11, height = 6, dpi = 300)
 }
 
-# Lambda sensitivity plot.
-lam_file <- "results_ch5_lambda_sensitivity_runtime_fixed.csv"
-if (file.exists(lam_file)) {
-  lam <- read.csv(lam_file, stringsAsFactors = FALSE) %>%
+if (file.exists("results_ch5_lambda_sensitivity_budgetsafe.csv")) {
+  lam <- read.csv("results_ch5_lambda_sensitivity_budgetsafe.csv", stringsAsFactors = FALSE) %>%
     filter(grepl("^Hybrid_lambda_", method)) %>%
     mutate(lambda_sh = as.numeric(gsub("Hybrid_lambda_", "", method)),
            theta_set_size = factor(theta_set_size),
@@ -143,13 +138,13 @@ if (file.exists(lam_file)) {
               mean_valid_power = mean(valid_power, na.rm = TRUE),
               mean_valid_rate = mean(valid_flag, na.rm = TRUE),
               mean_power = mean(final_power_hat, na.rm = TRUE),
+              mean_overrun = mean(budget_overrun_sec, na.rm = TRUE),
               .groups = "drop") %>%
     filter(n_valid_power > 0, is.finite(mean_valid_power))
 
   p_lam <- ggplot(lam_sum,
                   aes(x = factor(lambda_sh), y = mean_valid_power,
-                      group = B_tune_sec, linetype = B_tune_sec,
-                      shape = B_tune_sec)) +
+                      group = B_tune_sec, linetype = B_tune_sec, shape = B_tune_sec)) +
     geom_line(linewidth = 0.9, na.rm = TRUE) +
     geom_point(size = 2.5, na.rm = TRUE) +
     facet_wrap(~ theta_set_size, nrow = 1) +
@@ -157,10 +152,8 @@ if (file.exists(lam_file)) {
          linetype = expression(B[tune]), shape = expression(B[tune])) +
     theme_main
 
-  ggsave("figures_runtime_fixed/ch5_lambda_sensitivity.png", p_lam,
+  ggsave("figures_budgetsafe/ch5_lambda_sensitivity.png", p_lam,
          width = 10, height = 6, dpi = 300)
 }
 
-message("Chapter 5 runtime-fixed figures written to ./figures_runtime_fixed/")
-print(list.files("figures_runtime_fixed", pattern = "^ch5_.*\\.png$", full.names = TRUE) %>%
-        .[!grepl("\\.with_title\\.png$", .)])
+message("Budget-safe Chapter 5 figures written to ./figures_budgetsafe/")

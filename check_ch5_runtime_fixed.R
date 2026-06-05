@@ -1,6 +1,4 @@
-# ============================================================
-# Diagnostics for runtime-fixed Chapter 5 results
-# ============================================================
+# Quick checks for the Chapter 5 result files.
 algorithm_file <- if (file.exists("algorithm3.1_runtime_fixed.R")) {
   "algorithm3.1_runtime_fixed.R"
 } else {

@@ -1,6 +1,4 @@
-# ============================================================
-# Run Chapter 5 experiments using runtime-fixed algorithm3.1
-# ============================================================
+# Run the Chapter 5 experiment set.
 chapter5_file <- if (file.exists("chapter5_runtime_fixed.R")) {
   "chapter5_runtime_fixed.R"
 } else {
